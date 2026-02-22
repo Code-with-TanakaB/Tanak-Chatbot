@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tanak-Chatbot | Cloud Document Storage</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    /* ── Chat Shell ── */
+    #chat-shell {
+      width: 100%;
+      max-width: 820px;
+      height: 90vh;
+      max-height: 860px;
+      display: flex;
+      flex-direction: column;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,.6);
+      border: 1px solid #1e2535;
+    }
+
+    /* ── Header ── */
+    #chat-header {
+      background: linear-gradient(135deg, #0a1628 0%, #0d2244 100%);
+      padding: 1.1rem 1.4rem;
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      border-bottom: 1px solid #1a4080;
+      flex-shrink: 0;
+    }
+    .avatar {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0ea5e9, #0369a1);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem; flex-shrink: 0;
+    }
+    .header-text h1 { font-size: 1rem; font-weight: 700; color: #f0f4ff; }
+    .header-text p  { font-size: 0.75rem; color: #7c88a8; margin-top: 1px; }
+    .status-dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: #22c55e;
+      margin-left: auto; flex-shrink: 0;
+      box-shadow: 0 0 6px #22c55e99;
+    }
+
+    /* ── Messages Area ── */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.2rem 1.2rem 0.5rem;
+      background: #12161f;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      scroll-behavior: smooth;
+    }
+    #messages::-webkit-scrollbar { width: 5px; }
+    #messages::-webkit-scrollbar-track { background: transparent; }
+    #messages::-webkit-scrollbar-thumb { background: #2a3350; border-radius: 10px; }
+
+    /* ── Message Bubbles ── */
+    .msg-row {
+      display: flex;
+      gap: 0.6rem;
+      max-width: 88%;
+      animation: fadeUp .25s ease;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .msg-row.bot  { align-self: flex-start; }
+    .msg-row.user { align-self: flex-end; flex-direction: row-reverse; }
+
+    .msg-avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: linear-gradient(135deg, #0ea5e9, #0369a1);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem; flex-shrink: 0; margin-top: 2px;
+    }
+    .msg-row.user .msg-avatar { background: linear-gradient(135deg, #10b981, #059669); }
+
+    .bubble {
+      padding: 0.65rem 1rem;
+      border-radius: 16px;
+      font-size: 0.9rem;
+      line-height: 1.55;
+      max-width: 100%;
+    }
+    .msg-row.bot  .bubble {
+      background: #1e2535;
+      border-bottom-left-radius: 4px;
+      color: #d8e0f0;
+    }
+    .msg-row.user .bubble {
+      background: linear-gradient(135deg, #0ea5e9, #0369a1);
+      border-bottom-right-radius: 4px;
+      color: #fff;
+    }
+    .bubble code {
+      background: #0d1321;
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+      font-size: 0.82em;
+      color: #93c5fd;
+    }
+
+    /* Ticket block inside bubble */
+    .ticket-block {
+      background: #0d1321;
+      border: 1px solid #2a3a5c;
+      border-radius: 10px;
+      padding: 0.8rem 1rem;
+      margin-top: 0.6rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.82rem;
+      line-height: 1.7;
+      color: #93c5fd;
+    }
+    .ticket-block b { color: #60a5fa; }
+
+    /* Severity tags */
+    .tag {
+      display: inline-block;
+      padding: 0.15em 0.55em;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      vertical-align: middle;
+    }
+    .tag-low    { background: #14532d; color: #4ade80; }
+    .tag-medium { background: #78350f; color: #fbbf24; }
+    .tag-high   { background: #7f1d1d; color: #f87171; }
+
+    /* Quick-reply chips */
+    #chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      padding: 0.5rem 1.2rem 0;
+      background: #12161f;
+      flex-shrink: 0;
+    }
+    .chip {
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      border: 1px solid #2a3a5c;
+      background: #1a2238;
+      color: #93c5fd;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: background .18s, border-color .18s;
+      white-space: nowrap;
+    }
+    .chip:hover { background: #243050; border-color: #3b82f6; }
+
+    /* ── Typing Indicator ── */
+    #typing-indicator { display: none; align-self: flex-start; }
+    #typing-indicator .bubble { display: flex; gap: 4px; align-items: center; padding: 0.7rem 1rem; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #4a5580; animation: bounce 1.2s infinite; }
+    .dot:nth-child(2) { animation-delay: .2s; }
+    .dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes bounce {
+      0%,60%,100% { transform: translateY(0); }
+      30% { transform: translateY(-6px); }
+    }
+
+    /* ── Input Area ── */
+    #input-area {
+      background: #1a1f2e;
+      border-top: 1px solid #1e2535;
+      padding: 0.9rem 1rem;
+      display: flex;
+      gap: 0.6rem;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+    #user-input {
+      flex: 1;
+      background: #12161f;
+      border: 1px solid #2a3a5c;
+      border-radius: 12px;
+      color: #e2e8f0;
+      font-size: 0.9rem;
+      padding: 0.65rem 1rem;
+      resize: none;
+      outline: none;
+      min-height: 44px;
+      max-height: 130px;
+      overflow-y: auto;
+      line-height: 1.45;
+      transition: border-color .2s;
+    }
+    #user-input:focus { border-color: #3b82f6; }
+    #user-input::placeholder { color: #4a5580; }
+
+    #send-btn {
+      width: 44px; height: 44px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg, #0ea5e9, #0369a1);
+      color: #fff;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: opacity .18s, transform .12s;
+    }
+    #send-btn:hover  { opacity: 0.88; }
+    #send-btn:active { transform: scale(0.94); }
+
+    /* ── Escalation Banner ── */
+    .escalation-banner {
+      background: linear-gradient(135deg, #450a0a, #7f1d1d);
+      border: 1px solid #dc262680;
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      margin-top: 0.6rem;
+      font-size: 0.85rem;
+      color: #fca5a5;
+      line-height: 1.5;
+    }
+    .escalation-banner strong { color: #f87171; }
+  </style>
+</head>
+<body>
+
+<div id="chat-shell">
+  <!-- Header -->
+  <div id="chat-header">
+    <div class="avatar">☁️</div>
+    <div class="header-text">
+      <h1>Tanak-Chatbot · CDS</h1>
+      <p>Cloud Document Storage — IT &amp; Sales Support · EN / ES / FR</p>
+    </div>
+    <div class="status-dot" title="Online"></div>
+  </div>
+
+  <!-- Messages -->
+  <div id="messages">
+    <!-- Typing indicator (lives inside messages) -->
+    <div class="msg-row bot" id="typing-indicator">
+      <div class="msg-avatar">☁️</div>
+      <div class="bubble">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick-reply chips -->
+  <div id="chip-row"></div>
+
+  <!-- Input -->
+  <div id="input-area">
+    <textarea id="user-input" rows="1" placeholder="Ask about IT support, storage plans, or security…"></textarea>
+    <button id="send-btn" title="Send">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"></line>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   TANAK-CHATBOT — Cloud Document Storage (CDS) Brain
+   ============================================================ */
+
+// ── State ──────────────────────────────────────────────────
+const state = {
+  lang: 'en',
+  step: 'idle',
+  ticketData: {},
+  salesData: {},
+};
+
+// ── i18n strings ───────────────────────────────────────────
+const i18n = {
+  en: {
+    greeting: `👋 Hello! I am **Tanak-Chatbot**, your CDS assistant.\n\nI can help you with **IT troubleshooting**, **file security**, or **upgrading your professional storage plan**.\n\nHow can I support your practice today?`,
+    chips_greeting: ['🔑 Password reset', '🌐 VPN / Network', '🐢 Slow computer', '🌊 Browser issues', '🔒 Security concern', '💻 Hardware problem'],
+    ask_name: `To create a support ticket, could I get your **full name** please?`,
+    ask_email: `Thank you! And your **email address**?`,
+    ask_describe: `Please briefly **describe the issue** you're experiencing.`,
+    ticket_intro: `✅ Your ticket has been created:`,
+    ticket_followup: `Our support team will contact you shortly. Is there anything else I can help with?`,
+    escalate_msg: `⚠️ **This issue requires specialist attention.**\n\nI am escalating this to our **Tier 3 Senior Engineering team** immediately. You will be contacted within the hour.`,
+    restart_prompt: `Is there anything else I can help you with? You can type a new issue or choose from the suggestions.`,
+    only_it: `I'm only able to assist with IT-related topics. Could you please describe an IT or technical issue you're facing?`,
+    unknown: `I'm not sure I fully understand. Could you provide more detail? Or I can create a support ticket if you'd like — just say "**create ticket**".`,
+    chips_common: ['✅ It worked!', '❌ Still not working', '📋 Create a ticket', '🔄 Start over'],
+  },
+  es: {
+    greeting: `👋 ¡Hola! Soy tu **Asistente de TI de Portfolio**.
+
+Estoy aquí para ayudarte a diagnosticar y resolver problemas de TI rápidamente.
+
+¿En qué puedo ayudarte hoy?`,
+    chips_greeting: ['🔑 Restablecer contraseña', '🌐 VPN / Red', '🐢 Computadora lenta', '🌊 Problemas con el navegador', '🔒 Problema de seguridad', '💻 Problema de hardware'],
+    ask_name: `Para crear un ticket de soporte, ¿podrías decirme tu **nombre completo**?`,
+    ask_email: `¡Gracias! ¿Y tu **correo electrónico**?`,
+    ask_describe: `Por favor, **describe brevemente** el problema que estás experimentando.`,
+    ticket_intro: `✅ Tu ticket ha sido creado:`,
+    ticket_followup: `Nuestro equipo de soporte se pondrá en contacto contigo en breve. ¿Hay algo más en que pueda ayudarte?`,
+    escalate_msg: `⚠️ **Este problema requiere atención especializada.**\n\nEstoy escalando esto a nuestro **equipo de Ingeniería Senior de Nivel 3** de inmediato. Serás contactado en menos de una hora.`,
+    restart_prompt: `¿Hay algo más en lo que pueda ayudarte? Puedes escribir un nuevo problema o elegir una de las sugerencias.`,
+    only_it: `Solo puedo asistir con temas relacionados con TI. ¿Podrías describir un problema técnico que estés enfrentando?`,
+    unknown: `No estoy seguro de entender completamente. ¿Podrías dar más detalles? También puedo crear un ticket de soporte — escribe "**crear ticket**".`,
+    chips_common: ['✅ ¡Funcionó!', '❌ Sigue sin funcionar', '📋 Crear ticket', '🔄 Empezar de nuevo'],
+  },
+  fr: {
+    greeting: `👋 Bonjour ! Je suis votre **Assistant IT Portfolio**.
+
+Je suis là pour vous aider à diagnostiquer et résoudre vos problèmes informatiques rapidement.
+
+Comment puis-je vous aider aujourd'hui ?`,
+    chips_greeting: ['🔑 Réinitialiser mot de passe', '🌐 VPN / Réseau', '🐢 Ordinateur lent', '🌊 Problèmes navigateur', '🔒 Problème de sécurité', '💻 Problème matériel'],
+    ask_name: `Pour créer un ticket de support, pourriez-vous me donner votre **nom complet** ?`,
+    ask_email: `Merci ! Et votre **adresse e-mail** ?`,
+    ask_describe: `Veuillez décrire brièvement le **problème que vous rencontrez**.`,
+    ticket_intro: `✅ Votre ticket a été créé :`,
+    ticket_followup: `Notre équipe de support vous contactera sous peu. Y a-t-il autre chose que je puisse faire pour vous ?`,
+    escalate_msg: `⚠️ **Ce problème nécessite une attention spécialisée.**\n\nJ'escalade ceci à notre **équipe d'ingénierie Senior Tier 3** immédiatement. Vous serez contacté dans l'heure.`,
+    restart_prompt: `Y a-t-il autre chose avec laquelle je puisse vous aider ? Vous pouvez décrire un nouveau problème ou choisir parmi les suggestions.`,
+    only_it: `Je ne peux assister qu'avec des sujets liés à l'informatique. Pourriez-vous décrire un problème technique ?`,
+    unknown: `Je ne suis pas sûr de bien comprendre. Pourriez-vous donner plus de détails ? Je peux aussi créer un ticket — tapez "**créer ticket**".`,
+    chips_common: ['✅ Ça a fonctionné !', '❌ Toujours pas résolu', '📋 Créer un ticket', '🔄 Recommencer'],
+  },
+};
+
+function t(key) { return (i18n[state.lang] || i18n.en)[key]; }
+
+// ── Language detection ─────────────────────────────────────
+function detectLang(text) {
+  const l = text.toLowerCase();
+  // French signals
+  if (/\b(bonjour|salut|merci|cela|votre|vous|réseau|mot de passe|problème|ordinateur|navigateur|créer ticket|recommencer)\b/.test(l)) return 'fr';
+  // Spanish signals
+  if (/\b(hola|gracias|cómo|como|computadora|contraseña|red|problema|navegador|empezar|crear ticket|restablece)\b/.test(l)) return 'es';
+  return 'en';
+}
+
+// ── Topic classifier ───────────────────────────────────────
+const TOPICS = [
+  {
+    id: 'password', level: 1,
+    rx: /password|contraseña|mot de passe|reset|réinitialiser|restablecer|login|connexion|acceso|forgot|olvidé|oublié/i,
+    en: { title: '🔑 Password Reset', steps: [
+      `Let's get you back in. Try these steps:`,
+      `1. Go to the login page and click **"Forgot Password"**.`,
+      `2. Enter your registered email address.`,
+      `3. Check your **spam/junk** folder if the reset email doesn't arrive within 2 minutes.`,
+      `4. The link expires in **15 minutes** — use it promptly.`,
+      `\nDid that resolve your issue?`,
+    ]},
+    es: { title: '🔑 Restablecimiento de Contraseña', steps: [
+      `Vamos a recuperar tu acceso. Sigue estos pasos:`,
+      `1. Ve a la página de inicio de sesión y haz clic en **"¿Olvidaste tu contraseña?"**.`,
+      `2. Ingresa tu correo electrónico registrado.`,
+      `3. Revisa la carpeta de **spam/correo no deseado** si no recibes el correo en 2 minutos.`,
+      `4. El enlace expira en **15 minutos** — úsalo pronto.`,
+      `\n¿Esto resolvió tu problema?`,
+    ]},
+    fr: { title: '🔑 Réinitialisation du Mot de Passe', steps: [
+      `Récupérons votre accès. Suivez ces étapes :`,
+      `1. Accédez à la page de connexion et cliquez sur **"Mot de passe oublié"**.`,
+      `2. Saisissez votre adresse e-mail enregistrée.`,
+      `3. Vérifiez votre dossier **spam/courriers indésirables** si l'e-mail n'arrive pas dans les 2 minutes.`,
+      `4. Le lien expire dans **15 minutes** — utilisez-le rapidement.`,
+      `\nCela a-t-il résolu votre problème ?`,
+    ]},
+  },
+  {
+    id: 'vpn', level: 2,
+    rx: /vpn|virtual private|network|réseau|red|wifi|wi-fi|internet|connect|conexión|connexion|ping|dns|ip address|dirección ip/i,
+    en: { title: '🌐 VPN / Network Issue', steps: [
+      `Network issues can have several causes. Let's work through them:`,
+      `**Step 1 — Basic checks:**\n- Restart your router/modem (unplug for 30 seconds).\n- Reconnect to your Wi-Fi network.`,
+      `**Step 2 — VPN specific:**\n- Disconnect and reconnect the VPN client.\n- Try a different VPN server location.\n- Ensure your VPN client is up to date.`,
+      `**Step 3 — DNS flush:**\nOpen Command Prompt (Windows) or Terminal (Mac/Linux) and run:\n\`ipconfig /flushdns\` (Windows) or \`sudo dscacheutil -flushcache\` (Mac)`,
+      `\nDid any of these steps help?`,
+    ]},
+    es: { title: '🌐 Problema de VPN / Red', steps: [
+      `Los problemas de red pueden tener varias causas. Vamos paso a paso:`,
+      `**Paso 1 — Verificaciones básicas:**\n- Reinicia tu router/módem (desconéctalo 30 segundos).\n- Vuelve a conectarte a tu red Wi-Fi.`,
+      `**Paso 2 — VPN específico:**\n- Desconecta y reconecta el cliente VPN.\n- Prueba con una ubicación de servidor VPN diferente.\n- Asegúrate de que tu cliente VPN esté actualizado.`,
+      `**Paso 3 — Limpiar DNS:**\nAbre el Símbolo del sistema (Windows) o Terminal (Mac/Linux) y ejecuta:\n\`ipconfig /flushdns\` (Windows) o \`sudo dscacheutil -flushcache\` (Mac)`,
+      `\n¿Alguno de estos pasos te ayudó?`,
+    ]},
+    fr: { title: '🌐 Problème VPN / Réseau', steps: [
+      `Les problèmes réseau peuvent avoir plusieurs causes. Procédons étape par étape :`,
+      `**Étape 1 — Vérifications de base :**\n- Redémarrez votre routeur/modem (débranchez 30 secondes).\n- Reconnectez-vous à votre réseau Wi-Fi.`,
+      `**Étape 2 — VPN spécifique :**\n- Déconnectez et reconnectez le client VPN.\n- Essayez un serveur VPN différent.\n- Assurez-vous que votre client VPN est à jour.`,
+      `**Étape 3 — Vider le cache DNS :**\nOuvrez l'Invite de commandes (Windows) ou le Terminal (Mac/Linux) et exécutez :\n\`ipconfig /flushdns\` (Windows) ou \`sudo dscacheutil -flushcache\` (Mac)`,
+      `\nL'une de ces étapes a-t-elle aidé ?`,
+    ]},
+  },
+  {
+    id: 'slow', level: 1,
+    rx: /slow|lent|lento|lag|freeze|freez|hang|stuck|bloqu|colgado|performance|rendement|rendimiento|ram|memory|mémoire|memoria/i,
+    en: { title: '🐢 Slow System / Performance', steps: [
+      `A sluggish system is frustrating. Let's speed things up:`,
+      `**Quick fixes:**\n- Close unused browser tabs and applications.\n- Restart your computer — this clears RAM.\n- Check if Windows Update is running in the background.`,
+      `**Intermediate fixes:**\n- Open Task Manager (<code>Ctrl+Shift+Esc</code>) → identify high-CPU/RAM processes.\n- Disable startup programs: Task Manager → Startup tab.\n- Run a quick antivirus scan.`,
+      `**Storage check:**\nEnsure your drive has at least **10–15% free space**. Low disk space causes significant slowdowns.`,
+      `\nDid any of these help? If not, I can escalate this for a deeper diagnostic.`,
+    ]},
+    es: { title: '🐢 Sistema Lento / Rendimiento', steps: [
+      `Un sistema lento es frustrante. Solucionémoslo:`,
+      `**Soluciones rápidas:**\n- Cierra pestañas del navegador y aplicaciones que no uses.\n- Reinicia tu computadora para liberar RAM.\n- Verifica si Windows Update está ejecutándose en segundo plano.`,
+      `**Soluciones intermedias:**\n- Abre el Administrador de tareas (<code>Ctrl+Shift+Esc</code>) → identifica procesos con alto uso de CPU/RAM.\n- Desactiva programas al inicio: Administrador de tareas → pestaña Inicio.\n- Ejecuta un análisis antivirus rápido.`,
+      `**Verificación de almacenamiento:**\nAsegúrate de tener al menos **10–15% de espacio libre**. El espacio en disco bajo causa ralentizaciones significativas.`,
+      `\n¿Alguno de estos pasos ayudó? Si no, puedo escalarlo para un diagnóstico más profundo.`,
+    ]},
+    fr: { title: '🐢 Système Lent / Performance', steps: [
+      `Un système lent est frustrant. Accélérons les choses :`,
+      `**Correctifs rapides :**\n- Fermez les onglets de navigateur et applications inutilisés.\n- Redémarrez votre ordinateur — cela libère la RAM.\n- Vérifiez si Windows Update s'exécute en arrière-plan.`,
+      `**Correctifs intermédiaires :**\n- Ouvrez le Gestionnaire des tâches (<code>Ctrl+Shift+Esc</code>) → identifiez les processus élevés en CPU/RAM.\n- Désactivez les programmes au démarrage : Gestionnaire des tâches → onglet Démarrage.\n- Lancez une analyse antivirus rapide.`,
+      `**Vérification du stockage :**\nAssurez-vous d'avoir au moins **10–15 % d'espace libre**. Un disque plein cause des ralentissements significatifs.`,
+      `\nL'une de ces étapes a-t-elle aidé ? Sinon, je peux escalader pour un diagnostic approfondi.`,
+    ]},
+  },
+  {
+    id: 'browser', level: 1,
+    rx: /browser|navigateur|navegador|chrome|firefox|edge|safari|cache|cookie|extension|addon|plugin|webpage|site|website|load|charg|carg/i,
+    en: { title: '🌊 Browser Issues', steps: [
+      `Browser problems are usually straightforward to fix:`,
+      `**Step 1 — Clear cache & cookies:**\nPress <code>Ctrl+Shift+Delete</code> (Windows) or <code>Cmd+Shift+Delete</code> (Mac) → select "All time" → clear data.`,
+      `**Step 2 — Disable extensions:**\nGo to browser settings → Extensions → temporarily disable all, then re-enable one by one to find the culprit.`,
+      `**Step 3 — Try a different browser:**\nThis helps confirm if the issue is browser-specific or system-wide.`,
+      `**Step 4 — Update your browser:**\nMenu → Help → About → update if available.`,
+      `\nDid that help?`,
+    ]},
+    es: { title: '🌊 Problemas con el Navegador', steps: [
+      `Los problemas del navegador generalmente son fáciles de resolver:`,
+      `**Paso 1 — Limpiar caché y cookies:**\nPresiona <code>Ctrl+Shift+Suprimir</code> (Windows) o <code>Cmd+Shift+Suprimir</code> (Mac) → selecciona "Desde siempre" → borrar datos.`,
+      `**Paso 2 — Deshabilitar extensiones:**\nVe a Configuración → Extensiones → deshabilita todas temporalmente y reactívalas una por una.`,
+      `**Paso 3 — Prueba otro navegador:**\nEsto confirma si el problema es específico del navegador o del sistema.`,
+      `**Paso 4 — Actualiza tu navegador:**\nMenú → Ayuda → Acerca de → actualiza si hay una versión disponible.`,
+      `\n¿Esto ayudó?`,
+    ]},
+    fr: { title: '🌊 Problèmes de Navigateur', steps: [
+      `Les problèmes de navigateur sont généralement faciles à résoudre :`,
+      `**Étape 1 — Effacer le cache et les cookies :**\nAppuyez sur <code>Ctrl+Shift+Suppr</code> (Windows) ou <code>Cmd+Shift+Suppr</code> (Mac) → sélectionnez "Depuis toujours" → effacer.`,
+      `**Étape 2 — Désactiver les extensions :**\nAllez dans Paramètres → Extensions → désactivez tout temporairement puis réactivez une par une.`,
+      `**Étape 3 — Essayez un autre navigateur :**\nCela confirme si le problème est spécifique au navigateur ou au système.`,
+      `**Étape 4 — Mettez à jour votre navigateur :**\nMenu → Aide → À propos → mettez à jour si disponible.`,
+      `\nCela vous a aidé ?`,
+    ]},
+  },
+  {
+    id: 'security', level: 3,
+    rx: /hack|breach|breche|brecha|virus|malware|ransomware|phishing|data leak|fuite|fuga|compromis|comprometido|unauthorized|non autorisé|no autorizado|suspicious|suspect|sospecho|security|sécurité|seguridad/i,
+    en: null, es: null, fr: null, // escalate immediately
+  },
+  {
+    id: 'hardware', level: 3,
+    rx: /hardware|matériel|hardware|server down|servidor caído|serveur tombé|blue screen|pantalla azul|écran bleu|bsod|hard drive|disque dur|disco duro|crash|data loss|perte de données|pérdida de datos|won't turn on|no enciende|ne s'allume pas/i,
+    en: null, es: null, fr: null, // escalate immediately
+  },
+];
+
+// ── Helpers ────────────────────────────────────────────────
+function generateTicketId() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function renderMarkdown(text) {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/<code>(.+?)<\/code>/g, '<code>$1</code>')
+    .replace(/`(.+?)`/g, '<code>$1</code>')
+    .replace(/\n/g, '<br>');
+}
+
+// ── DOM helpers ────────────────────────────────────────────
+const messagesEl = document.getElementById('messages');
+const chipRowEl  = document.getElementById('chip-row');
+const inputEl    = document.getElementById('user-input');
+const typingEl   = document.getElementById('typing-indicator');
+
+function scrollBottom() {
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function addMessage(who, html, extra = '') {
+  const row = document.createElement('div');
+  row.className = `msg-row ${who}`;
+
+  const av = document.createElement('div');
+  av.className = 'msg-avatar';
+  av.textContent = who === 'bot' ? '🤖' : '👤';
+
+  const bub = document.createElement('div');
+  bub.className = 'bubble';
+  bub.innerHTML = html + extra;
+
+  row.appendChild(av);
+  row.appendChild(bub);
+  messagesEl.insertBefore(row, typingEl);
+  scrollBottom();
+  return bub;
+}
+
+function showTyping() {
+  typingEl.style.display = 'flex';
+  scrollBottom();
+}
+function hideTyping() {
+  typingEl.style.display = 'none';
+}
+
+function setChips(labels) {
+  chipRowEl.innerHTML = '';
+  labels.forEach(label => {
+    const btn = document.createElement('button');
+    btn.className = 'chip';
+    btn.textContent = label;
+    btn.addEventListener('click', () => {
+      inputEl.value = label;
+      sendMessage();
+    });
+    chipRowEl.appendChild(btn);
+  });
+}
+
+function botReply(htmlMsg, chips = [], delay = 900) {
+  showTyping();
+  setTimeout(() => {
+    hideTyping();
+    addMessage('bot', htmlMsg);
+    if (chips.length) setChips(chips);
+    else chipRowEl.innerHTML = '';
+  }, delay);
+}
+
+// Build ticket HTML
+function buildTicketHTML(data) {
+  const severityClass = { Low: 'tag-low', Medium: 'tag-medium', High: 'tag-high' }[data.severity] || 'tag-low';
+  return `<div class="ticket-block">
+<b>🎫 Ticket #${data.id}</b><br>
+<b>User:</b> ${data.name}<br>
+<b>Email:</b> ${data.email}<br>
+<b>Severity:</b> <span class="tag ${severityClass}">${data.severity}</span><br>
+<b>Description:</b> ${data.description}
+</div>`;
+}
+
+// ── Main response engine ───────────────────────────────────
+function processInput(raw) {
+  const text = raw.trim();
+  if (!text) return;
+
+  // Detect language switch
+  const detected = detectLang(text);
+  if (detected !== state.lang) state.lang = detected;
+
+  const lower = text.toLowerCase();
+
+  // ── Restart ──
+  if (/start over|recommencer|empezar de nuevo|nueva consulta|restart|reset chat/.test(lower) || text === '🔄 Start over' || text === '🔄 Recommencer' || text === '🔄 Empezar de nuevo') {
+    state.step = 'idle';
+    state.ticketData = {};
+    botReply(renderMarkdown(t('greeting')), t('chips_greeting'));
+    return;
+  }
+
+  // ── Ticket FSM ──
+  if (state.step === 'ticket_name') {
+    state.ticketData.name = text;
+    state.step = 'ticket_email';
+    botReply(renderMarkdown(t('ask_email')));
+    return;
+  }
+  if (state.step === 'ticket_email') {
+    state.ticketData.email = text;
+    state.step = 'ticket_describe';
+    botReply(renderMarkdown(t('ask_describe')));
+    return;
+  }
+  if (state.step === 'ticket_describe') {
+    state.ticketData.description = text;
+    state.ticketData.id = generateTicketId();
+    state.ticketData.severity = state.ticketData.severity || 'Medium';
+    const tktHTML = buildTicketHTML(state.ticketData);
+    state.step = 'idle';
+    botReply(renderMarkdown(t('ticket_intro')) + tktHTML + '<br>' + renderMarkdown(t('ticket_followup')), t('chips_greeting'), 1100);
+    return;
+  }
+
+  // ── Explicit ticket request ──
+  if (/create ticket|créer ticket|crear ticket|open ticket|abrir ticket|ticket|support request/.test(lower) || text === '📋 Create a ticket' || text === '📋 Créer un ticket' || text === '📋 Crear ticket') {
+    state.step = 'ticket_name';
+    state.ticketData = { severity: 'Medium' };
+    botReply(renderMarkdown(t('ask_name')));
+    return;
+  }
+
+  // ── Worked / resolved ──
+  if (/it worked|worked|ça a fonctionné|funcionó|resuelto|resolved|fixed|all good|merci|gracias|thank/.test(lower) || text === '✅ It worked!' || text === '✅ ¡Funcionó!' || text === '✅ Ça a fonctionné !') {
+    const msgs = {
+      en: `🎉 Excellent! Glad I could help. Don't hesitate to reach out if anything else comes up.`,
+      es: `🎉 ¡Excelente! Me alegra haber podido ayudarte. No dudes en contactarme si surge algo más.`,
+      fr: `🎉 Excellent ! Je suis ravi d'avoir pu vous aider. N'hésitez pas à me recontacter si besoin.`,
+    };
+    state.step = 'idle';
+    botReply(msgs[state.lang], t('chips_greeting'));
+    return;
+  }
+
+  // ── Still not working ──
+  if (/still not|always|toujours|sigue sin|not working|not resolved|ne fonctionne pas|no funciona/.test(lower) || text === '❌ Still not working' || text === '❌ Toujours pas résolu' || text === '❌ Sigue sin funcionar') {
+    const msgs = {
+      en: `No worries — I can create a support ticket so our engineers can investigate further. Shall I do that?`,
+      es: `No hay problema — puedo crear un ticket de soporte para que nuestros ingenieros investiguen más. ¿Lo hago?`,
+      fr: `Pas de souci — je peux créer un ticket de support pour que nos ingénieurs enquêtent davantage. Dois-je le faire ?`,
+    };
+    state.step = 'idle';
+    botReply(msgs[state.lang], t('chips_common'));
+    return;
+  }
+
+  // ── Topic matching ──
+  for (const topic of TOPICS) {
+    if (topic.rx.test(text)) {
+      if (topic.level === 3) {
+        // Escalate
+        const msgs = {
+          en: renderMarkdown(t('escalate_msg')) + `<div class="escalation-banner"><strong>Issue type detected:</strong> ${topic.id === 'security' ? 'Security Breach / Malware' : 'Hardware / Server Failure'}<br>Ticket automatically logged. Ref: <strong>#${generateTicketId()}</strong></div>`,
+          es: renderMarkdown(t('escalate_msg')) + `<div class="escalation-banner"><strong>Tipo de problema detectado:</strong> ${topic.id === 'security' ? 'Brecha de Seguridad / Malware' : 'Fallo de Hardware / Servidor'}<br>Ticket registrado automáticamente. Ref: <strong>#${generateTicketId()}</strong></div>`,
+          fr: renderMarkdown(t('escalate_msg')) + `<div class="escalation-banner"><strong>Type de problème détecté :</strong> ${topic.id === 'security' ? 'Violation de Sécurité / Malware' : 'Panne Matérielle / Serveur'}<br>Ticket enregistré automatiquement. Réf : <strong>#${generateTicketId()}</strong></div>`,
+        };
+        botReply(msgs[state.lang], t('chips_greeting'), 1200);
+        return;
+      }
+
+      // Level 1 / 2 solution
+      const data = topic[state.lang] || topic.en;
+      const html = `<strong>${data.title}</strong><br><br>` + renderMarkdown(data.steps.join('\n'));
+      state.step = 'after_solution';
+      botReply(html, t('chips_common'), 1000);
+      return;
+    }
+  }
+
+  // ── Non-IT filter (basic) ──
+  if (/weather|sport|music|film|movie|food|recipe|joke|politique|política|politics|stock|crypto|bitcoin/i.test(text)) {
+    botReply(renderMarkdown(t('only_it')), t('chips_greeting'));
+    return;
+  }
+
+  // ── Fallback ──
+  botReply(renderMarkdown(t('unknown')), t('chips_common'));
+}
+
+// ── Send handler ───────────────────────────────────────────
+function sendMessage() {
+  const text = inputEl.value.trim();
+  if (!text) return;
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
+  chipRowEl.innerHTML = '';
+  addMessage('user', text.replace(/</g, '&lt;'));
+  processInput(text);
+}
+
+document.getElementById('send-btn').addEventListener('click', sendMessage);
+inputEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+// Auto-resize textarea
+inputEl.addEventListener('input', function () {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 130) + 'px';
+});
+
+// ── Bootstrap greeting ─────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    hideTyping();
+    addMessage('bot', renderMarkdown(i18n.en.greeting));
+    setChips(i18n.en.chips_greeting);
+  }, 600);
+  showTyping();
+});
+</script>
+</body>
+</html>
